@@ -7,7 +7,7 @@
 - http://edusanjal.com/college/
 
 ##### directory "high-school-and-college/edunepal" is a Scrapy Project
-- scrapy necessary data 
+- crawling necessary data 
 
 ##### directory "schools-list" is a jupyter notebook project 
 - cleaning necessary data from excel file 
