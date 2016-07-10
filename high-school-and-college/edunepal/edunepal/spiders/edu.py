@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import scrapy
-from scrapy.selector import Selector
 from edunepal.items import EdunepalItem
 import re
 import sys
@@ -21,8 +20,6 @@ class EduSpider(scrapy.Spider):
         sys.setdefaultencoding('utf-8')
 
     def parse(self, response):
-
-
         list_details_elements = response.xpath("//div[@class='listDetails']")
         for item in list_details_elements:
             short_info = item.xpath('normalize-space(.//div[@class="shortInfo"])').extract_first()
@@ -32,32 +29,25 @@ class EduSpider(scrapy.Spider):
             funding = "Others"
             if "Private" in short_info:
                 funding = "Private"
-
-                # print("Private")
             elif "Public" in short_info:
                 funding = "Public"
-                # print("Public")
 
             request = scrapy.Request(response.urljoin(college_link), self.parse_each_edu_org)
             request.meta['funding'] = funding
             request.meta['category'] = category
             yield request
 
-        # "<a href="?page=2" rel="next">Next</a>"
 
         next_url = response.xpath("//a[@rel='next']/@href").extract_first()
-
-
         if next_url:
             yield scrapy.Request(response.urljoin(next_url),self.parse)
 
 
 
     def parse_each_edu_org(self,response):
-        # print(response.url)
 
 
-        print("********* Name *************")
+        print("********* Name  of Organization *************")
         org_name = response.xpath('normalize-space(//h1[@class="mainHeading"])').extract_first()
         print (org_name)
 
@@ -69,10 +59,22 @@ class EduSpider(scrapy.Spider):
         category = response.meta['category']
         print(category)
 
+
         print("********* Education Board *************")
         education_board = response.xpath("//ul[@class='DetailsList']/li[2]/a/text()").extract()
-        education_board = ",".join(education_board)
+        highschool_board = ""
+        college_board = []
+        if education_board:
+            for board in education_board:
+                if board.strip() == "HSEB":
+                    highschool_board = board.strip()
+                else:
+                    college_board.append(board.strip())
+
         print(education_board)
+        print(highschool_board)
+        print(college_board)
+
 
         print("********* Contact Number *************")
         contact_no = response.xpath('normalize-space(//ul[@class="DetailsList"]/li[3])').extract_first()
@@ -85,14 +87,14 @@ class EduSpider(scrapy.Spider):
         if district_zone_elements:
             try:
                 district =district_zone_elements[0]
-                print(district)
                 if district:
                     try:
                         zone = district_zone_elements[1]
                     except:
-                        zone = "Null"
+                        zone = None
             except:
-                district = "Null"
+                district = None
+        print (district,zone)
 
 
         print("********* Full Address *************")
@@ -100,34 +102,37 @@ class EduSpider(scrapy.Spider):
         full_address = unicodedata.normalize("NFKD", full_address)
 
         print("********* Stree Address *************")
-        # street_address = full_address.strip(zone)
         street_address = re.sub(r'\b' + district + r'\b', ' ', full_address)
         street_address = re.sub(r'\b' + zone + r'\b', ' ', street_address)
 
         print(street_address)
 
+
         print("********* courses *************")
         course_elements = response.xpath("//ul[@class='list_link']/li")
-        course_list = []
-        high_school_course_list = []
-        college_and_uni_course_list = []
+        hseb_dict_list = []
+        college_and_uni_dict_list =[]
         for course in course_elements:
-            c = course.xpath('normalize-space()').extract_first()
-            course_list.append(c)
-            if "Ten Plus Two" in c:
-                high_school_course_list.append(c)
+            course = course.xpath('normalize-space()').extract_first()
+            if "Ten Plus Two" in course:
+                course_items = [x for x in course.split(";") if x.strip()]
+                course_detail = {
+                    "Title": self.get_index(course_items, 0),
+                    "Capacity": self.get_index(course_items, 1),
+                    "Fee": self.get_index(course_items, 2)
+                }
+                hseb_dict_list.append(course_detail)
+
             else:
-                college_and_uni_course_list.append(c)
+                course_items = [x for x in course.split(";") if x.strip()]
+                course_detail = {
+                    "Title": self.get_index(course_items, 0),
+                    "Capacity": self.get_index(course_items, 1),
+                    "Fee": self.get_index(course_items, 2)
+                }
+                college_and_uni_dict_list.append(course_detail)
 
-        print("********* All Courses List *************")
-        print(",\n".join(course_list))
-        courses = ",".join(course_list)
 
-        print("********* High School Courses *************")
-        print(high_school_course_list)
-
-        print("********* Colleges Courses *************")
-        print(college_and_uni_course_list)
 
 
         print("********* Websites,links,email *************")
@@ -165,49 +170,95 @@ class EduSpider(scrapy.Spider):
         print(email)
 
         print("********* Prefered Contact Address *************")
+        info_elements = response.xpath("normalize-space(//div[@class='normalContentWrapp'])").extract_first()
 
-        contact_address_elements = response.xpath("normalize-space(//div[@class='normalContentWrapp'])").extract_first()
-        if "Contact Address" in contact_address_elements:
-            contact_address = contact_address_elements.split("Contact Address")
-            print (contact_address[-1])
-            contact_address = contact_address[-1]
+        print("***************** Established ********************************")
+
+        all_dates = re.findall(
+            r'(([Ee]stablished in)?([Ff]ounded in)?([Ee]stablishment)? ((20|1\d)\d\d)\s?([adADbsBS.]{2,4})?)',info_elements)
+        estb = []
+
+        if all_dates:
+            for date in all_dates:
+                item = ['established in', 'founded in', 'establishment']
+                for r in range(len(item)):
+                    if item[r] in date[0].lower():
+                        d = re.sub(r'[eE]stablished in|[fF]ounded in|[Ee]stablishment', "", date[0])
+                        estb.append(d.strip())
+        else:
+            estb.append("")
+
+
+        print("*************** Prefered Contact Address********************************")
+        contact_address = re.findall(r'Contact Address(.*)',info_elements)
+        if contact_address:
+            contact_address = contact_address[0]
         else:
             contact_address = full_address
 
-        print("********* link *************")
+        print(contact_address)
+
+
+        print("********* link *********************")
         link = response.url
 
 
+        ## instantiate  EdunepalItem
         item = EdunepalItem()
-        item['OrganizationName'] = org_name
-        item['EducationBoard'] = education_board
-        print(item['EducationBoard'].split(","))
 
-        item['ContactNo'] = contact_no
-        item['Email'] = email
-        item['Website'] = org_website
-        item['StreetAddress'] = street_address
-        item['District'] = district
-        item['Zone'] = zone
-        item['ContactAddress'] = contact_address
-        item['Courses'] = courses
-        item['HighSchoolCourses'] = ",".join(high_school_course_list)
-        item['CollegeAndUniCourses'] = ",".join(college_and_uni_course_list)
+        ## creating Dictionary item
+        item['OrganizationOverview'] = {
+            "Organization Name": self.strip(org_name),
+            "Established": ",".join(estb),
+            "Education Board": {
+                "High School": highschool_board,
+                "Higher Education Board": college_board
+            },
+            "Contact Number": self.strip(contact_no),
+            "Email Address": self.strip(email),
+            "Website": self.strip(org_website),
+            "Detail Link": self.strip(link),
+            "Street Address": self.strip(street_address),
+            "District": self.strip(district),
+            "Zone": self.strip(zone),
+            "Prefered Contact Address": self.strip(contact_address),
+            "Courses": {
+                "HSEB": hseb_dict_list,
+                "CollegeAndUni": college_and_uni_dict_list
+            },
+            "Funding": funding,
+            "Social Links": {
+                "Facebook": self.strip(facebook_link),
+                "Google": self.strip(googleplus_link),
+                "Twitter": self.strip(twitter_link),
+                "Youtube": self.strip(youtube_link),
 
-        item['Link'] = link
-        item['Funding'] = funding
+            },
+            "Other Links": others_link,
+            "Category":category
 
-        item['FacebookLink'] = facebook_link
-        item['GooglePlusLink'] = googleplus_link
-        item['TwitterLink'] = twitter_link
-        item['YoutubeLink'] = youtube_link
-        item['OtherLinks'] = ",".join(others_link)
-
+        }
 
         yield item
 
 
 
+    def get_index(self,item_list, index):
+        try:
+            value = item_list[index]
+            try:
+                value = value.strip()
+            except:
+                value = value
+        except:
+            value = ""
+        return value
 
+    def strip(self,string):
+        try:
+            value = string.strip()
+        except:
+            value = string
+        return value
 
 

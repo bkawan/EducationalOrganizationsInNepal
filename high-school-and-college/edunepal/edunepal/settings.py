@@ -63,7 +63,6 @@ NEWSPIDER_MODULE = 'edunepal.spiders'
 # See http://scrapy.readthedocs.org/en/latest/topics/item-pipeline.html
 ITEM_PIPELINES = {
    # 'edunepal.pipelines.SomePipeline': 300,
-   'edunepal.pipelines.CsvPipeline': 300,
    'edunepal.pipelines.JsonPipeline': 300,
 }
 
